@@ -7,7 +7,7 @@ This guide gets you from zero to **live Power Platform telemetry in Fabric** as 
 - Azure subscription with Contributor access
 - Microsoft Fabric workspace on F2+ capacity (or 60-day trial)
 - Power Platform tenant with at least one environment
-- Entra ID app registration with `https://api.powerplatform.com/.default` permission
+- Entra ID app registration with `https://api.powerplatform.com/.default` permission — see [app-registration.md](./app-registration.md)
 - Local tools: Azure CLI, .NET 8 SDK, Azure Functions Core Tools v4, Bicep
 
 ## Step 1 — Deploy Azure resources (5 min)

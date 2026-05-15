@@ -56,30 +56,86 @@ The CoE builds it; these stakeholders consume the same underlying dataset throug
 
 ## Architecture
 
+### End-to-end data flow
+
 ```mermaid
-flowchart LR
-    subgraph Sources["Power Platform"]
-        PP[("Diagnostic Settings\nBAP REST APIs")]
+flowchart TB
+    subgraph PP["Power Platform Tenant"]
+        direction TB
+        DS["Diagnostic Settings\n(per environment)"]
+        BAP["BAP REST APIs\n(tenant-level analytics)"]
     end
 
-    subgraph Azure["Azure"]
-        FN["Azure Function\n(.NET 8 isolated)"]
-        EH["Event Hubs"]
+    subgraph AZ["Azure Subscription"]
+        direction TB
+        UAMI["User-Assigned\nManaged Identity"]
+        FN["Azure Function App\n(.NET 8 isolated · Flex Consumption)"]
+        KV["Key Vault\n(RBAC mode)"]
+        AI["Application Insights\n(observability)"]
+        EH["Event Hubs Namespace\n(hub: pp-telemetry)"]
     end
 
-    subgraph Fabric["Microsoft Fabric"]
-        ES["Eventstream"]
-        BZ[("Bronze\n(raw JSON)")]
-        SV[("Silver\n(typed Delta)")]
-        GD[("Gold\n(star schema)")]
-        EV[("Eventhouse\n(KQL hot 7d)")]
-        PBI["Power BI\nDirect Lake"]
+    subgraph FB["Microsoft Fabric"]
+        direction TB
+        ES["Eventstream\n(Custom Endpoint source)"]
+        subgraph Lake["OneLake — Medallion Lakehouse"]
+            BZ[("Bronze\nraw JSON / Delta")]
+            SV[("Silver\ntyped, deduped Delta")]
+            GD[("Gold\nstar schema:\ndim_ + fact_ tables")]
+        end
+        EV[("Eventhouse (KQL)\n7-day hot window")]
+        NB["PySpark Notebooks\n(01 → 02 → 03)"]
+        PBI["Power BI\nDirect Lake semantic model"]
     end
 
-    PP --> FN --> EH --> ES --> BZ
-    ES --> EV
-    BZ --> SV --> GD --> PBI
+    subgraph CI["GitHub Actions"]
+        IW["infra.yml\n(Bicep validate → what-if → deploy)"]
+        FW["function.yml\n(build → publish)"]
+    end
+
+    DS -- "Dataverse, Apps,\nFlows, Copilot Studio\nactivity logs" --> EH
+    BAP -- "License usage\nEnvironment lifecycle" --> FN
+    FN -- "polls every 15 min / 1 h" --> BAP
+    FN -- "publishes events" --> EH
+    FN -. "reads secrets" .-> KV
+    FN -. "identity" .-> UAMI
+    FN -. "traces & metrics" .-> AI
+    EH -- "Event Hubs–compatible\nSAS endpoint" --> ES
+    ES -- "destination 1" --> BZ
+    ES -- "destination 2" --> EV
+    NB -- "Bronze → Silver" --> SV
+    NB -- "Silver → Gold" --> GD
+    GD --> PBI
+    EV -. "sub-second\nincident queries" .-> PBI
+    IW -. "OIDC · deploys infra" .-> AZ
+    FW -. "OIDC · deploys function" .-> FN
 ```
+
+### How each component works
+
+| # | Component | What it does | Key detail |
+|---|---|---|---|
+| 1 | **Diagnostic Settings** | Streams environment-level activity (Dataverse, Power Apps, Power Automate, Copilot Studio) to Event Hubs | Configured per environment via PowerShell or BAP REST API |
+| 2 | **Azure Function** | Polls BAP REST APIs for **tenant-level** analytics not available in diagnostic settings | Two timer triggers: `PollLicenseUsage` (every 15 min), `PollEnvironmentLifecycle` (hourly) |
+| 3 | **Event Hubs** | Central ingestion point — receives both diagnostic streams and Function-produced events | Fabric Eventstream connects via the Event Hubs–compatible custom endpoint |
+| 4 | **Key Vault** | Stores `fabric-eventstream-cs` (Eventstream SAS) and `pp-tenant-sp-secret` (app registration secret) | RBAC mode — UAMI gets `Key Vault Secrets User` role |
+| 5 | **Eventstream** | Ingests from Event Hubs and fans out to two destinations | Destination 1: Bronze Lakehouse table (Delta). Destination 2: Eventhouse table (KQL, 7-day retention) |
+| 6 | **Bronze Lakehouse** | Raw events as-is, partitioned by `eventType` and `ingestion_time` | Schema: `{ eventType, timestamp, tenantId, payload_json }` |
+| 7 | **Silver Lakehouse** | Parsed, typed, deduped Delta tables per event type | Notebook `01_bronze_to_silver.py` — runs every 30 min |
+| 8 | **Gold Lakehouse** | Star schema: `dim_environment`, `dim_app`, `dim_maker`, `fact_app_session`, `fact_flow_run`, `fact_license` | Notebook `02_silver_to_gold.py` — runs hourly |
+| 9 | **Eventhouse (KQL)** | Hot 7-day window for sub-second queries — incident response, live dashboards | Query directly from KQL queryset or Power BI |
+| 10 | **Power BI Direct Lake** | Semantic model over Gold tables — no import/copy, reads Delta directly from OneLake | 30+ DAX measures in `notebooks/measures.dax` |
+| 11 | **GitHub Actions** | Two workflows: `infra.yml` (Bicep IaC) and `function.yml` (Function build + deploy) | OIDC workload identity federation — no secrets stored in GitHub |
+
+### Security posture
+
+| Control | Implementation |
+|---|---|
+| Identity | User-Assigned Managed Identity (UAMI) for Function App; Entra ID app registration for BAP API access |
+| Secrets | Key Vault (RBAC mode) — Function reads via `@Microsoft.KeyVault(...)` references |
+| Network | Private endpoints recommended for production (Storage, Event Hubs, Key Vault) |
+| CI/CD | OIDC workload identity federation — no long-lived secrets in GitHub |
+| Observability | Application Insights (workspace-based) for traces, metrics, and health checks |
 
 Full architecture details: [docs/architecture.md](./docs/architecture.md) | [Glossary](./docs/glossary.md)
 
@@ -182,20 +238,50 @@ Add your own vertical by copying [docs/verticals/_template.md](./docs/verticals/
 
 ```
 .
+├── .github/
+│   ├── workflows/
+│   │   ├── infra.yml                ← Bicep validate → what-if → deploy (OIDC)
+│   │   └── function.yml             ← .NET build → func publish (OIDC)
+│   ├── ISSUE_TEMPLATE/              ← Bug report + feature request templates
+│   └── pull_request_template.md
+├── architecture/                    ← draw.io diagrams (editable in VS Code)
 ├── docs/
-│   ├── business-use-case.md      ← canonical use case & personas (read first)
-│   ├── architecture.md           ← architecture deep dive
-│   ├── prerequisites.md          ← licensing, identities, Azure resources
-│   ├── glossary.md               ← BAP, CoE Kit, Direct Lake, etc.
-│   └── verticals/                ← 6 industry lenses + template
-├── architecture/                 ← draw.io diagrams
-├── lab/                          ← Lab walkthrough (~4 h)
-├── infra/bicep/                  ← IaC: Event Hubs, Functions, KV, UAMI, RBAC
-├── src/functions/                ← .NET 8 telemetry forwarder (BAP API → Event Hubs)
-├── fabric/kql/                   ← Eventhouse setup scripts + KQL queries
-├── notebooks/                    ← PySpark medallion + DAX measures
-├── scripts/                      ← Operational helpers
-└── .github/workflows/            ← CI/CD with OIDC workload identity
+│   ├── app-registration.md          ← Step-by-step Entra ID app reg + BAP permissions
+│   ├── architecture.md              ← Architecture deep dive
+│   ├── business-use-case.md         ← Canonical use case & personas (read first)
+│   ├── glossary.md                  ← BAP, CoE Kit, Direct Lake, etc.
+│   ├── prerequisites.md             ← Licensing, identities, Azure resources
+│   ├── QUICKSTART.md                ← 15-minute quick path
+│   └── verticals/                   ← 6 industry lenses + template
+├── fabric/
+│   ├── kql/sample-queries.kql       ← 10 ready-to-run KQL queries
+│   ├── kql/setup_silver_gold.ps1    ← Creates Silver/Gold KQL tables
+│   ├── kql/verify.ps1               ← Verification script
+│   └── notebooks/pp_inspect_bronze.ipynb
+├── infra/bicep/
+│   ├── main.bicep                   ← Full IaC: EH, Function, KV, UAMI, RBAC, AI, Storage
+│   └── main.bicepparam              ← Parameter file
+├── lab/
+│   └── README.md                    ← Full lab walkthrough (~4 h, step-by-step)
+├── notebooks/
+│   ├── 01_bronze_to_silver.py       ← Parse JSON, type-cast, dedupe → Silver
+│   ├── 02_silver_to_gold.py         ← Build star schema dim/fact → Gold
+│   ├── 03_gold_quality_checks.py    ← Data quality harness
+│   ├── measures.dax                 ← 30+ DAX measures for Direct Lake model
+│   └── README.md                    ← Scheduling guide
+├── scripts/
+│   └── update-eventstream-secret.ps1
+├── src/functions/PpTelemetryForwarder/
+│   ├── BapClient.cs                 ← BAP REST API auth + calls
+│   ├── TenantTelemetryFunction.cs   ← Timer triggers (15 min + hourly)
+│   ├── EventHubPublisher.cs         ← Event Hub producer
+│   ├── DiagnosticFunction.cs        ← Health check endpoint
+│   ├── Program.cs                   ← DI + host builder
+│   └── host.json / .csproj
+├── CONTRIBUTING.md
+├── LICENSE (MIT)
+├── README.md                        ← You are here
+└── SECURITY.md
 ```
 
 ## Getting started
@@ -206,10 +292,11 @@ See [docs/QUICKSTART.md](./docs/QUICKSTART.md) — deploy the infrastructure, tr
 
 ### Full lab path
 
-1. **Read** [docs/business-use-case.md](./docs/business-use-case.md) — confirm the use case, pick your vertical lens.
-2. **Provision** the items in [docs/prerequisites.md](./docs/prerequisites.md).
-3. **Run the lab** — Follow [lab/](./lab/) to deploy the pipeline, wire Fabric, run medallion notebooks, and build the Power BI model (~4 h).
-4. **Extend** — Add your vertical KPIs from `docs/verticals/<industry>.md` to `notebooks/measures.dax`.
+1. **Create an app registration** — follow [docs/app-registration.md](./docs/app-registration.md) to set up the Entra ID service principal and register it as a Power Platform management application.
+2. **Read** [docs/business-use-case.md](./docs/business-use-case.md) — confirm the use case, pick your vertical lens.
+3. **Provision** the items in [docs/prerequisites.md](./docs/prerequisites.md).
+4. **Run the lab** — Follow [lab/](./lab/) to deploy the pipeline, wire Fabric, run medallion notebooks, and build the Power BI model (~4 h).
+5. **Extend** — Add your vertical KPIs from `docs/verticals/<industry>.md` to `notebooks/measures.dax`.
 
 ## Sample KQL queries (Eventhouse)
 

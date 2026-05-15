@@ -9,7 +9,7 @@
 | Dataverse database | Provisioned in target environment | Required for CoE Kit + Link to Fabric |
 | Azure subscription | Contributor + User Access Administrator | Needed for RBAC assignments |
 | Microsoft Fabric capacity | Capacity Admin | F2+ SKU or 60-day trial |
-| Microsoft Entra ID | App registration permission | For service principal |
+| Microsoft Entra ID | App registration permission | For service principal — see [app-registration.md](./app-registration.md) |
 
 ## Power Platform components
 

@@ -68,9 +68,9 @@ AVERAGEX(
 
 ## 6. Lab variation
 
-- Lab-02 step 1: Bicep parameterized for **paired-region** Event Hubs and ZRS storage; many utilities require in-region only.
+- Lab step 1: Bicep parameterized for **paired-region** Event Hubs and ZRS storage; many utilities require in-region only.
 - Add an Azure Function or Logic App to pull asset master and outage events from your OMS / GIS into Bronze.
-- Add a Purview scan rule for asset-data lineage as part of the lab-02 pipeline.
+- Add a Purview scan rule for asset-data lineage as part of the lab pipeline.
 - Add a `notebooks/04_carbon_attribution.py` that joins Azure Carbon Optimization data with `dim_app[asset_class]` for ESG attribution.
 
 ## 7. Open questions for adopters

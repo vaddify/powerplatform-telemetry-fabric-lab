@@ -56,26 +56,19 @@ The CoE builds it; these stakeholders consume the same underlying dataset throug
 
 ## Architecture
 
-Two parallel tracks — pick one or run both:
-
 ```mermaid
 flowchart LR
     subgraph Sources["Power Platform"]
-        PP[("Diagnostic Settings\nApp Insights\nBAP REST APIs\nCoE Kit")]
+        PP[("Diagnostic Settings\nBAP REST APIs")]
     end
 
-    subgraph Track1["Track 1 — Low-code  ~2h"]
-        LF["Link to Fabric\n(Dataverse mirror)"]
-        DG["Dataflow Gen2\n(App Insights pull)"]
-    end
-
-    subgraph Track2["Track 2 — Pro-code  ~4h"]
-        EH["Event Hubs"]
+    subgraph Azure["Azure"]
         FN["Azure Function\n(.NET 8 isolated)"]
-        ES["Fabric Eventstream"]
+        EH["Event Hubs"]
     end
 
     subgraph Fabric["Microsoft Fabric"]
+        ES["Eventstream"]
         BZ[("Bronze\n(raw JSON)")]
         SV[("Silver\n(typed Delta)")]
         GD[("Gold\n(star schema)")]
@@ -83,20 +76,10 @@ flowchart LR
         PBI["Power BI\nDirect Lake"]
     end
 
-    PP --> LF --> BZ
-    PP --> DG --> BZ
-    PP --> EH --> ES --> BZ
-    FN --> EH
-    BZ --> SV --> GD --> PBI
+    PP --> FN --> EH --> ES --> BZ
     ES --> EV
+    BZ --> SV --> GD --> PBI
 ```
-
-| Signal | Recommendation |
-|---|---|
-| Need it this week, < 5 envs | **Track 1** (low-code) |
-| Sub-minute freshness, custom enrichment | **Track 2** (pro-code) |
-| Regulated / sovereign cloud | **Track 2** (control plane in your subscription) |
-| Hybrid (most common) | **Both** — Track 1 for Dataverse, Track 2 for diagnostics |
 
 Full architecture details: [docs/architecture.md](./docs/architecture.md) | [Glossary](./docs/glossary.md)
 
@@ -201,13 +184,12 @@ Add your own vertical by copying [docs/verticals/_template.md](./docs/verticals/
 .
 ├── docs/
 │   ├── business-use-case.md      ← canonical use case & personas (read first)
-│   ├── architecture.md           ← Track 1 vs Track 2 deep dive
+│   ├── architecture.md           ← architecture deep dive
 │   ├── prerequisites.md          ← licensing, identities, Azure resources
 │   ├── glossary.md               ← BAP, CoE Kit, Direct Lake, etc.
 │   └── verticals/                ← 6 industry lenses + template
-├── architecture/                 ← draw.io diagrams (4 variants)
-├── lab-01-lowcode/               ← Track 1 walkthrough (~2 h)
-├── lab-02-procode/               ← Track 2 walkthrough (~4 h)
+├── architecture/                 ← draw.io diagrams
+├── lab/                          ← Lab walkthrough (~4 h)
 ├── infra/bicep/                  ← IaC: Event Hubs, Functions, KV, UAMI, RBAC
 ├── src/functions/                ← .NET 8 telemetry forwarder (BAP API → Event Hubs)
 ├── fabric/kql/                   ← Eventhouse setup scripts + KQL queries
@@ -226,9 +208,8 @@ See [docs/QUICKSTART.md](./docs/QUICKSTART.md) — deploy the infrastructure, tr
 
 1. **Read** [docs/business-use-case.md](./docs/business-use-case.md) — confirm the use case, pick your vertical lens.
 2. **Provision** the items in [docs/prerequisites.md](./docs/prerequisites.md).
-3. **Track 1** — Run [lab-01-lowcode](./lab-01-lowcode/) to land Dataverse + admin telemetry in Fabric (~2 h).
-4. **Track 2** — Run [lab-02-procode](./lab-02-procode/) to add streaming diagnostics + custom enrichment + CI/CD (~4 h).
-5. **Extend** — Add your vertical KPIs from `docs/verticals/<industry>.md` to `notebooks/measures.dax`.
+3. **Run the lab** — Follow [lab/](./lab/) to deploy the pipeline, wire Fabric, run medallion notebooks, and build the Power BI model (~4 h).
+4. **Extend** — Add your vertical KPIs from `docs/verticals/<industry>.md` to `notebooks/measures.dax`.
 
 ## Sample KQL queries (Eventhouse)
 

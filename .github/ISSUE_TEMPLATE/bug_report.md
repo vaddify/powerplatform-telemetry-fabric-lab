@@ -9,13 +9,8 @@ assignees: ''
 ## Describe the bug
 A clear and concise description of what's wrong.
 
-## Track
-- [ ] Track 1 — Low-code / no-code
-- [ ] Track 2 — Pro-code
-- [ ] Both / infrastructure
-
 ## Lab step
-Which step in the lab guide failed? (e.g., lab-02 Step 3)
+Which step in the lab guide failed? (e.g., Step 3)
 
 ## Expected behavior
 What should have happened.

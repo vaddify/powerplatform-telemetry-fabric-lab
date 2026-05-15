@@ -133,8 +133,8 @@ The base pipeline, schema, and Tier 1+2 measures stay identical. Verticals **add
 | Phase | Weeks | Outcome |
 |---|---|---|
 | **Inception** | 1–2 | Use case approved, exec sponsor signed, vertical lens picked, workspace + capacity provisioned |
-| **Foundations** | 3–6 | Track 1 (low-code) live: Link to Fabric on, App Insights export on, base Power BI report shipped |
-| **Industrialization** | 7–10 | Track 2 (pro-code) live: Bicep deployed, Eventstream streaming, gold layer + DQ checks running |
+| **Foundations** | 3–6 | Pipeline live: Bicep deployed, Function polling, Eventstream streaming, base Power BI report shipped |
+| **Industrialization** | 7–10 | Gold layer + DQ checks running, CI/CD wired, alerts configured |
 | **Activation** | 11–12 | Workspace app published, alerts wired, vertical KPIs added, CoE operating rhythms (weekly review) started |
 
 ## 11. Open questions for adopters (fill in your fork)

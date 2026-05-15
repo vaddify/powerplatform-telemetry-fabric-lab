@@ -5,19 +5,19 @@
 | Item | Required role | Notes |
 |---|---|---|
 | Microsoft 365 tenant | Global admin (setup) / Power Platform admin | Trial works |
-| Power Platform environment | System Administrator | Managed env recommended for Track 2 |
+| Power Platform environment | System Administrator | Managed env recommended |
 | Dataverse database | Provisioned in target environment | Required for CoE Kit + Link to Fabric |
 | Azure subscription | Contributor + User Access Administrator | Needed for RBAC assignments |
 | Microsoft Fabric capacity | Capacity Admin | F2+ SKU or 60-day trial |
-| Microsoft Entra ID | App registration permission | For service principal in Track 2 |
+| Microsoft Entra ID | App registration permission | For service principal |
 
 ## Power Platform components
 
 - **CoE Starter Kit** installed in a dedicated environment (latest release).
 - **Power Platform Admin Center** access for tenant-level analytics + diagnostic settings.
-- **Application Insights** linked to one or more environments (Track 1) — Power Platform admin → Environments → *env* → Settings → Product → Application Insights.
+- **Application Insights** linked to one or more environments — Power Platform admin → Environments → *env* → Settings → Product → Application Insights.
 
-## Azure resources (Track 2 / pro-code)
+## Azure resources
 
 Provisioned by [infra/bicep/main.bicep](../infra/bicep/main.bicep):
 
@@ -33,8 +33,6 @@ Provisioned by [infra/bicep/main.bicep](../infra/bicep/main.bicep):
 
 - A **workspace** assigned to the Fabric capacity.
 - A **Lakehouse** named `pp_bronze`, `pp_silver`, `pp_gold` (created by lab steps).
-- For Track 1: enable **"Link to Microsoft Fabric"** on the target Dataverse environment (Power Apps maker portal → Tables → *Analyze* → Link to Microsoft Fabric).
-
 ## Local tooling
 
 | Tool | Version | Install |

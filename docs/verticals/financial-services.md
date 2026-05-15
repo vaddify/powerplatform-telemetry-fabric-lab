@@ -63,8 +63,8 @@ CALCULATE(
 
 ## 6. Lab variation
 
-- Add a **second DLP policy** in lab-01 step 4: `Block all custom + HTTP connectors in Production unless app is tagged sox=true and attested`.
-- Add a **Purview classification rule** for MNPI in lab-02 step 4 (Eventstream → on Bronze write, run Purview scan).
+- Add a **second DLP policy** in lab step 4: `Block all custom + HTTP connectors in Production unless app is tagged sox=true and attested`.
+- Add a **Purview classification rule** for MNPI in lab step 4 (Eventstream → on Bronze write, run Purview scan).
 - Extend `02_silver_to_gold.py` to read an external `attestations` Dataverse table and join to `dim_app`.
 - Power BI report: add an "Attestation Cockpit" page; export to PDF on a monthly schedule for audit evidence.
 

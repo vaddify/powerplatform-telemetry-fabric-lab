@@ -1,4 +1,4 @@
-# Lab 02 — Pro-code track
+# Lab — Power Platform Telemetry to Fabric
 
 **Goal**: stream Power Platform telemetry through your own Azure pipeline into a Fabric **medallion lakehouse**, with full IaC + CI/CD.
 
@@ -116,7 +116,7 @@ Wire them into a **Data Factory pipeline** in Fabric for orchestration + retries
 
 ## Step 7 — Power BI Direct Lake model
 
-Same pattern as Track 1, but pointed at `pp_gold`:
+Build the semantic model from `pp_gold`:
 
 1. Open `pp_gold` Lakehouse → **New semantic model** → pick all `dim_*` and `fact_*` tables.
 2. Mark `dim_date` as date table.

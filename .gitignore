@@ -55,4 +55,5 @@ eventstream-full.json
 
 # Build / deployment artifacts
 *.zip
+**/`0`]
 logs/

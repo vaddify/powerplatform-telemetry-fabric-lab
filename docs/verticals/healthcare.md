@@ -66,8 +66,8 @@ DIVIDE(
 
 ## 6. Lab variation
 
-- Lab-01 step 1: link App Insights only to environments in approved regions; check `data_residency` before connecting.
-- Lab-02 step 5: add an Eventstream **transformation** that calls a Functions endpoint to redact PII/PHI before landing in Bronze.
+- Lab step 1: link App Insights only to environments in approved regions; check `data_residency` before connecting.
+- Lab step 5: add an Eventstream **transformation** that calls a Functions endpoint to redact PII/PHI before landing in Bronze.
 - Add a `notebooks/04_signature_attestation.py` notebook that hashes each GxP flow run output and writes a manifest table.
 - Power BI report: add a "Privacy Cockpit" page; quarterly exports for HIPAA OCR readiness.
 

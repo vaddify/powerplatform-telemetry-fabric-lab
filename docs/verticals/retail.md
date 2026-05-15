@@ -63,8 +63,8 @@ DIVIDE(
 
 ## 6. Lab variation
 
-- Lab-01 step 5: add a `dim_store` table sourced from your retail master data (Dataverse or D365 Commerce) and join via `cloud_RoleName`.
-- Lab-02 step 1: use `Standard_ZRS` storage and a paired-region failover policy — peak-season RTO is unforgiving.
+- Lab step 5: add a `dim_store` table sourced from your retail master data (Dataverse or D365 Commerce) and join via `cloud_RoleName`.
+- Lab step 1: use `Standard_ZRS` storage and a paired-region failover policy — peak-season RTO is unforgiving.
 - Add a Power BI **mobile layout** for district managers; the workspace app becomes a tablet experience.
 - Add `notebooks/04_promo_leadtime.py` that joins promo flow telemetry with merchandising calendar.
 

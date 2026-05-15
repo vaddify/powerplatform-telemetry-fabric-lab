@@ -7,7 +7,7 @@ Each file here is a **delta** on the base [business-use-case.md](../business-use
 3. Data tags / classifications to apply in the silver/gold layers.
 4. Alert thresholds tuned for the vertical's risk appetite.
 5. Suggested DAX measures.
-6. Lab variation (if any) on top of the base low-code / pro-code labs.
+6. Lab variation (if any) on top of the base lab.
 
 | File | Vertical |
 |---|---|

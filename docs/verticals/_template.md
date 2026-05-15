@@ -36,7 +36,7 @@ Add these as columns on `pp_silver` tables and propagate to `pp_gold` dim tables
 
 ## 6. Lab variation
 
-What changes in `lab-01-lowcode` or `lab-02-procode` for this vertical? (Often: extra DLP setup, extra Purview classification rules, extra Power BI app workspace.)
+What changes in `lab/` for this vertical? (Often: extra DLP setup, extra Purview classification rules, extra Power BI app workspace.)
 
 ## 7. Open questions for adopters
 

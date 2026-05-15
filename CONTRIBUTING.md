@@ -11,7 +11,7 @@ Thank you for your interest in improving the Power Platform Adoption & Operation
 ### Bug reports & feature requests
 
 1. Open an [Issue](../../issues) describing the problem or idea.
-2. Include the track (low-code / pro-code), Azure region, and Fabric SKU if relevant.
+2. Include the Azure region and Fabric SKU if relevant.
 
 ### Adding a new vertical
 

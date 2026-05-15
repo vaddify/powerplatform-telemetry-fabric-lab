@@ -1,6 +1,6 @@
 # Quickstart — See data flow in 15 minutes
 
-This guide gets you from zero to **live Power Platform telemetry in Fabric** as fast as possible using Track 2 (pro-code). For the full lab experience, see [lab-02-procode](../lab-02-procode/).
+This guide gets you from zero to **live Power Platform telemetry in Fabric** as fast as possible. For the full lab experience, see [lab/](../lab/).
 
 ## Prerequisites
 
@@ -113,7 +113,6 @@ The Function App polls Power Platform REST APIs every 15 minutes (license usage)
 
 ## Next steps
 
-- **Full Track 2 lab**: [lab-02-procode](../lab-02-procode/) — adds medallion notebooks, Direct Lake BI, CI/CD
-- **Track 1 (low-code)**: [lab-01-lowcode](../lab-01-lowcode/) — no-code approach using Link to Fabric
+- **Full lab**: [lab/](../lab/) — adds medallion notebooks, Direct Lake BI, CI/CD
 - **Add your vertical**: Copy [docs/verticals/_template.md](../docs/verticals/_template.md) and add Tier-3 KPIs
 - **Business context**: [docs/business-use-case.md](../docs/business-use-case.md) — full persona definitions and KPI catalog

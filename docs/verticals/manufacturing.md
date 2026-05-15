@@ -65,8 +65,8 @@ CALCULATE(
 
 ## 6. Lab variation
 
-- Lab-01 step 1: separate App Insights resources per plant region for data residency and incident isolation.
-- Lab-02 step 1: deploy Bicep with **paired-region** Event Hubs + ZRS storage (plants run 24/7).
+- Lab step 1: separate App Insights resources per plant region for data residency and incident isolation.
+- Lab step 1: deploy Bicep with **paired-region** Event Hubs + ZRS storage (plants run 24/7).
 - Add an Azure Function timer that pulls plant OEE from your historian (PI / Aveva / Ignition) and lands it in Bronze for correlation.
 - Add a `dim_clearance` table from HR for ITAR enforcement.
 

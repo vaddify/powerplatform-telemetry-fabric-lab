@@ -71,7 +71,7 @@ DIVIDE(
 ## 6. Lab variation
 
 - Use **Microsoft Cloud for Sovereignty** / **GCC High** subscriptions; Bicep parameterized for sovereign endpoints.
-- Lab-02 GitHub Actions: use **GitHub Actions for Azure Government** runners; OIDC issuer URL is the sovereign one.
+- Lab GitHub Actions: use **GitHub Actions for Azure Government** runners; OIDC issuer URL is the sovereign one.
 - Add a `notebooks/04_accessibility_scan.py` notebook that calls Accessibility Insights CLI on each public app's URL and writes results.
 - Add a Power BI export job that produces the FOIA registry as CSV nightly to a SharePoint records library.
 

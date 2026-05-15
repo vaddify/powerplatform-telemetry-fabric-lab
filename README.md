@@ -1,31 +1,56 @@
 # Power Platform Telemetry Pipeline on Microsoft Fabric
 
 ```mermaid
-flowchart LR
-    PP["Power Platform\nTenant"] --> EH
-    FN["Azure Function\n.NET 8"] -- polls BAP APIs --> PP
-    FN -- publishes JSON --> EH["Event Hubs"]
-    EH --> ES["Fabric\nEventstream"]
-    DV["Dataverse"] -- Link to Fabric\nzero-ETL --> DVMirror["Dataverse\nLakehouse"]
-    ES --> BZ["Bronze"]
-    ES --> KQL["Eventhouse\nKQL"]
-    BZ --> SV["Silver"]
-    DVMirror -- join at Gold --> GD
-    SV --> GD["Gold"]
-    GD --> PBI["Power BI\nDirect Lake"]
+%%{init: {'theme':'base', 'themeVariables':{'fontSize':'20px','lineColor':'#555'}, 'flowchart':{'nodeSpacing':50,'rankSpacing':70,'padding':20,'wrappingWidth':240}}}%%
+flowchart TB
+    subgraph SRC["  ⚡ Sources  "]
+        PP["Power Platform\nTenant"]
+        DV["Dataverse"]
+        FN["Azure Function\n.NET 8"]
+    end
+
+    subgraph INGEST["  🔀 Ingestion  "]
+        EH["Event Hubs"]
+        ES["Fabric Eventstream"]
+        DVMirror["Dataverse Lakehouse\nLink to Fabric · zero-ETL"]
+    end
+
+    subgraph STORE["  🏗️ Lakehouse + Analytics  "]
+        BZ["Bronze"]
+        SV["Silver"]
+        GD["Gold"]
+        KQL["Eventhouse · KQL"]
+        PBI["Power BI\nDirect Lake"]
+    end
+
+    FN -- polls BAP APIs --> PP
+    PP -- diagnostic\nlogs --> EH
+    FN -- publishes\nJSON --> EH
+    EH --> ES
+    DV -- Link to Fabric\nzero-ETL CDC --> DVMirror
+
+    ES --> BZ
+    ES --> KQL
+    BZ --> SV
+    SV --> GD
+    DVMirror -. inventory\njoin .-> GD
+    GD --> PBI
     KQL -.-> PBI
 
-    style PP fill:#742774,color:#fff
-    style DV fill:#742774,color:#fff
-    style FN fill:#0078D4,color:#fff
-    style EH fill:#0078D4,color:#fff
-    style ES fill:#E8740C,color:#fff
-    style BZ fill:#E8740C,color:#fff
-    style SV fill:#E8740C,color:#fff
-    style GD fill:#E8740C,color:#fff
-    style DVMirror fill:#E8740C,color:#fff
-    style KQL fill:#E8740C,color:#fff
-    style PBI fill:#F2C811,color:#000
+    style PP fill:#742774,color:#fff,stroke:#742774,stroke-width:2px
+    style DV fill:#742774,color:#fff,stroke:#742774,stroke-width:2px
+    style FN fill:#0078D4,color:#fff,stroke:#0078D4,stroke-width:2px
+    style EH fill:#0078D4,color:#fff,stroke:#0078D4,stroke-width:2px
+    style ES fill:#E8740C,color:#fff,stroke:#E8740C,stroke-width:2px
+    style DVMirror fill:#E8740C,color:#fff,stroke:#E8740C,stroke-width:2px
+    style BZ fill:#E8740C,color:#fff,stroke:#E8740C,stroke-width:2px
+    style SV fill:#E8740C,color:#fff,stroke:#E8740C,stroke-width:2px
+    style GD fill:#E8740C,color:#fff,stroke:#E8740C,stroke-width:2px
+    style KQL fill:#E8740C,color:#fff,stroke:#E8740C,stroke-width:2px
+    style PBI fill:#F2C811,color:#000,stroke:#D4A80A,stroke-width:2px
+    style SRC fill:#f5f0ff,stroke:#742774,stroke-width:2px,color:#333
+    style INGEST fill:#f0f6ff,stroke:#0078D4,stroke-width:2px,color:#333
+    style STORE fill:#fff8f0,stroke:#E8740C,stroke-width:2px,color:#333
 ```
 
 A production-grade reference implementation that gives any **Power Platform Center
@@ -145,6 +170,7 @@ Path 3 · COLD (Dataverse mirror)
 ## Data flow
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables':{'fontSize':'16px','lineColor':'#555'}, 'flowchart':{'nodeSpacing':35,'rankSpacing':55,'padding':14,'subGraphTitleMargin':{'top':8,'bottom':8},'wrappingWidth':220}}}%%
 flowchart TB
     subgraph PP["Power Platform Tenant"]
         DS["Diagnostic Settings\nper environment"]

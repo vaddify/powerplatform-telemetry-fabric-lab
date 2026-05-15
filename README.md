@@ -1,5 +1,29 @@
 # Power Platform Telemetry Pipeline on Microsoft Fabric
 
+```mermaid
+flowchart LR
+    PP["Power Platform\nTenant"] --> EH["Event Hubs"]
+    PP --> FN["Azure Function\n.NET 8"]
+    FN --> EH
+    EH --> ES["Fabric\nEventstream"]
+    ES --> BZ["Bronze"]
+    ES --> KQL["Eventhouse\nKQL"]
+    BZ --> SV["Silver"]
+    SV --> GD["Gold"]
+    GD --> PBI["Power BI\nDirect Lake"]
+    KQL -.-> PBI
+
+    style PP fill:#742774,color:#fff
+    style EH fill:#0078D4,color:#fff
+    style FN fill:#0078D4,color:#fff
+    style ES fill:#E8740C,color:#fff
+    style BZ fill:#E8740C,color:#fff
+    style SV fill:#E8740C,color:#fff
+    style GD fill:#E8740C,color:#fff
+    style KQL fill:#E8740C,color:#fff
+    style PBI fill:#F2C811,color:#000
+```
+
 A production-grade reference implementation that consolidates all Power Platform
 telemetry — diagnostic settings, BAP REST APIs, Application Insights — into a
 **Microsoft Fabric medallion lakehouse** with a Direct Lake Power BI model,
@@ -45,41 +69,63 @@ adoption, and operations questions across time, environments, and business units
 | 7 | **Eventhouse** (KQL) | 7-day hot window for sub-second incident queries and live dashboards |
 | 8 | **Power BI Direct Lake** | Semantic model over Gold tables — reads Delta directly from OneLake, 30+ DAX measures |
 
-## Stack
+## Data flow
 
+```mermaid
+flowchart TB
+    subgraph PP["Power Platform Tenant"]
+        DS["Diagnostic Settings\nper environment"]
+        BAP["BAP REST APIs\ntenant-level analytics"]
+    end
+
+    subgraph AZ["Azure Subscription"]
+        FN["Azure Function\n.NET 8 isolated · Flex Consumption"]
+        EH["Event Hubs\npp-telemetry"]
+        KV["Key Vault\nRBAC mode"]
+        UAMI["UAMI"]
+        AI["App Insights"]
+    end
+
+    subgraph FB["Microsoft Fabric"]
+        ES["Eventstream"]
+        subgraph Lake["OneLake — Medallion"]
+            BZ[("Bronze\nraw JSON")]
+            SV[("Silver\ntyped Delta")]
+            GD[("Gold\nstar schema")]
+        end
+        EV[("Eventhouse\n7-day KQL")]
+        NB["PySpark Notebooks"]
+        PBI["Power BI\nDirect Lake"]
+    end
+
+    subgraph CI["GitHub Actions"]
+        IW["infra.yml"]
+        FW["function.yml"]
+    end
+
+    DS -- activity logs --> EH
+    BAP -- license & env data --> FN
+    FN -- publishes events --> EH
+    FN -. secrets .-> KV
+    FN -. identity .-> UAMI
+    FN -. traces .-> AI
+    EH -- SAS endpoint --> ES
+    ES --> BZ
+    ES --> EV
+    NB -- Bronze → Silver --> SV
+    NB -- Silver → Gold --> GD
+    GD --> PBI
+    EV -.-> PBI
+    IW -. OIDC deploy .-> AZ
+    FW -. OIDC deploy .-> FN
 ```
-            Power Platform Tenant
-                     |
-        +------------+------------+
-        |                         |
-   Diagnostic Settings      BAP REST APIs
-   (per environment)        (tenant-level)
-        |                         |
-        v                         v
-   Event Hubs  <--------  Azure Function (.NET 8)
-        |                     |         |
-        v                     v         v
-   Fabric Eventstream    Key Vault   App Insights
-        |
-        +------------------+
-        |                  |
-        v                  v
-   Bronze Lakehouse    Eventhouse (KQL)
-   (raw JSON Delta)    (7-day hot window)
-        |
-        v
-   Silver Lakehouse        Security
-   (typed, deduped)        - UAMI (managed identity)
-        |                  - Key Vault (RBAC)
-        v                  - OIDC federation (CI/CD)
-   Gold Lakehouse          - Private endpoints (prod)
-   (star schema)
-        |
-        v
-   Power BI Direct Lake    CI/CD
-   (30+ DAX measures)      - infra.yml  (Bicep)
-                           - function.yml (.NET build + publish)
-```
+
+| Control | Implementation |
+|---|---|
+| **Identity** | User-Assigned Managed Identity (UAMI) for Function; Entra ID app registration for BAP API |
+| **Secrets** | Key Vault (RBAC mode) — Function reads via `@Microsoft.KeyVault(...)` references |
+| **Network** | Private endpoints recommended for production (Storage, Event Hubs, Key Vault) |
+| **CI/CD** | OIDC workload identity federation — no long-lived secrets in GitHub |
 
 ## The 8 base KPIs
 

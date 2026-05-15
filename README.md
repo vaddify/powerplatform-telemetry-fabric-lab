@@ -2,10 +2,9 @@
 
 ```mermaid
 flowchart LR
-    PP["Power Platform\nTenant"] --> EH["Event Hubs"]
-    PP --> FN["Azure Function\n.NET 8"]
-    FN --> EH
-    EH --> ES["Fabric\nEventstream"]
+    PP["Power Platform\nTenant"] --> ES
+    FN["Azure Function\n.NET 8"] -- polls BAP APIs --> PP
+    FN -- publishes --> ES["Fabric\nEventstream"]
     ES --> BZ["Bronze"]
     ES --> KQL["Eventhouse\nKQL"]
     BZ --> SV["Silver"]
@@ -14,7 +13,6 @@ flowchart LR
     KQL -.-> PBI
 
     style PP fill:#742774,color:#fff
-    style EH fill:#0078D4,color:#fff
     style FN fill:#0078D4,color:#fff
     style ES fill:#E8740C,color:#fff
     style BZ fill:#E8740C,color:#fff
@@ -25,10 +23,11 @@ flowchart LR
 ```
 
 A production-grade reference implementation that consolidates all Power Platform
-telemetry — diagnostic settings, BAP REST APIs, Application Insights — into a
-**Microsoft Fabric medallion lakehouse** with a Direct Lake Power BI model,
-sub-second KQL queries, and 8 base KPIs. Built with Bicep, Azure Functions
-(.NET 8 isolated), Event Hubs, and Fabric Eventstream. Deployed via GitHub Actions
+telemetry into a **Microsoft Fabric medallion lakehouse** with a Direct Lake
+Power BI model, sub-second KQL queries, and 8 base KPIs. An Azure Function
+(.NET 8 isolated) polls BAP REST APIs and publishes directly to a Fabric
+Eventstream Custom Endpoint. Diagnostic settings stream per-environment activity
+to the same Eventstream. Infrastructure is deployed via Bicep and GitHub Actions
 with OIDC workload identity federation.
 
 ## Purpose
@@ -41,12 +40,13 @@ adoption, and operations questions across time, environments, and business units
 ## Objectives
 
 1. **Consolidate all signals.** Diagnostic settings stream Dataverse, Power Apps,
-   Power Automate, and Copilot Studio activity. An Azure Function polls BAP REST
-   APIs for tenant-level metrics not available in diagnostics (license usage,
-   environment lifecycle).
-2. **Land in Fabric.** Event Hubs → Eventstream → Bronze Lakehouse (raw JSON) →
-   Silver (typed Delta) → Gold (star schema) → Power BI Direct Lake. A parallel
-   Eventhouse provides a 7-day hot window for sub-second KQL queries.
+   Power Automate, and Copilot Studio activity to a Fabric Eventstream. An Azure
+   Function polls BAP REST APIs for tenant-level metrics not available in
+   diagnostics (license usage, environment lifecycle) and publishes to the same
+   Eventstream via its Event Hub-compatible Custom Endpoint.
+2. **Land in Fabric.** Eventstream → Bronze Lakehouse (raw JSON) → Silver (typed
+   Delta) → Gold (star schema) → Power BI Direct Lake. A parallel Eventhouse
+   provides a 7-day hot window for sub-second KQL queries.
 3. **Use real Azure end-to-end, no fictional CLIs.** Provision with Bicep, deploy
    with `func azure functionapp publish`, wire Fabric manually, verify with
    App Insights and KQL — all documented step-by-step.
@@ -60,14 +60,13 @@ adoption, and operations questions across time, environments, and business units
 
 | # | Component | What it does |
 |---|---|---|
-| 1 | **Diagnostic Settings** | Streams per-environment activity (Dataverse, Apps, Flows, Copilot Studio) to Event Hubs |
-| 2 | **Azure Function** (.NET 8 isolated, Flex Consumption) | Polls BAP REST APIs — `PollLicenseUsage` every 15 min, `PollEnvironmentLifecycle` hourly |
-| 3 | **Event Hubs** | Central ingestion point for both diagnostic streams and Function-produced events |
-| 4 | **Key Vault** (RBAC mode) | Stores Eventstream SAS connection string and app registration secret |
-| 5 | **Fabric Eventstream** | Ingests from Event Hubs, fans out to Bronze Lakehouse (Delta) + Eventhouse (KQL) |
-| 6 | **Bronze → Silver → Gold notebooks** | PySpark medallion: parse → type-cast → dedupe → star schema (dim/fact tables) |
-| 7 | **Eventhouse** (KQL) | 7-day hot window for sub-second incident queries and live dashboards |
-| 8 | **Power BI Direct Lake** | Semantic model over Gold tables — reads Delta directly from OneLake, 30+ DAX measures |
+| 1 | **Diagnostic Settings** | Streams per-environment activity (Dataverse, Apps, Flows, Copilot Studio) to the Eventstream |
+| 2 | **Azure Function** (.NET 8 isolated, Flex Consumption) | Polls BAP REST APIs — `PollLicenseUsage` every 15 min, `PollEnvironmentLifecycle` hourly — publishes to Eventstream Custom Endpoint |
+| 3 | **Key Vault** (RBAC mode) | Stores Eventstream SAS connection string and app registration secret; Function reads via `@Microsoft.KeyVault(...)` references |
+| 4 | **Fabric Eventstream** (Custom Endpoint source) | Receives events from both diagnostic settings and the Azure Function, fans out to Bronze Lakehouse (Delta) + Eventhouse (KQL) |
+| 5 | **Bronze → Silver → Gold notebooks** | PySpark medallion: parse → type-cast → dedupe → star schema (dim/fact tables) |
+| 6 | **Eventhouse** (KQL) | 7-day hot window for sub-second incident queries and live dashboards |
+| 7 | **Power BI Direct Lake** | Semantic model over Gold tables — reads Delta directly from OneLake, 30+ DAX measures |
 
 ## Data flow
 
@@ -80,14 +79,13 @@ flowchart TB
 
     subgraph AZ["Azure Subscription"]
         FN["Azure Function\n.NET 8 isolated · Flex Consumption"]
-        EH["Event Hubs\npp-telemetry"]
         KV["Key Vault\nRBAC mode"]
         UAMI["UAMI"]
         AI["App Insights"]
     end
 
     subgraph FB["Microsoft Fabric"]
-        ES["Eventstream"]
+        ES["Eventstream\nCustom Endpoint source"]
         subgraph Lake["OneLake — Medallion"]
             BZ[("Bronze\nraw JSON")]
             SV[("Silver\ntyped Delta")]
@@ -103,13 +101,12 @@ flowchart TB
         FW["function.yml"]
     end
 
-    DS -- activity logs --> EH
-    BAP -- license & env data --> FN
-    FN -- publishes events --> EH
-    FN -. secrets .-> KV
-    FN -. identity .-> UAMI
+    DS -- activity logs --> ES
+    FN -- polls --> BAP
+    FN -- publishes events\nvia EH-compatible SAS --> ES
+    KV -. secrets .-> FN
+    UAMI -. identity .-> FN
     FN -. traces .-> AI
-    EH -- SAS endpoint --> ES
     ES --> BZ
     ES --> EV
     NB -- Bronze → Silver --> SV
@@ -255,7 +252,7 @@ powerplatform-telemetry-fabric-lab/
     kql/verify.ps1                   Verification script
     notebooks/pp_inspect_bronze.ipynb
   infra/bicep/
-    main.bicep                       Full IaC: EH, Function, KV, UAMI, RBAC
+    main.bicep                       Full IaC: Function, KV, UAMI, RBAC, App Insights, Storage
     main.bicepparam                  Parameter file
   lab/
     README.md                        Full lab walkthrough (10 steps, ~4 h)

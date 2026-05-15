@@ -18,10 +18,13 @@ Each surface has its own retention window (often 7–30 days). To do **historica
 This lab uses Azure-native services for full control, custom enrichment, and CI/CD:
 
 1. **Diagnostic settings** on each environment stream telemetry to **Event Hubs**.
-2. An **Azure Function** (.NET 8 isolated, Flex Consumption) polls **BAP REST APIs** for tenant-level metrics not available via diagnostics (license usage, environment lifecycle), and writes to the same hub.
-3. **Eventstream** in Fabric ingests the hub into a **Bronze Lakehouse** (raw JSON).
-4. A **notebook pipeline** transforms Bronze → Silver (typed Delta) → Gold (aggregated star schema).
-5. **Power BI Direct Lake** serves warm analytics; **Eventhouse (KQL)** serves a hot 7-day window for sub-second incident queries.
+2. An **Azure Function** (.NET 8 isolated, Flex Consumption) polls **BAP REST APIs** for tenant-level metrics not available via diagnostics (license usage, environment lifecycle), and publishes JSON events to the same **Event Hubs namespace**.
+3. **Event Hubs** feeds a Fabric **Eventstream** via an EH-compatible SAS connection string.
+4. **Eventstream** fans out to two destinations: a **Bronze Lakehouse** (raw JSON as Delta) and an **Eventhouse** (KQL for sub-second hot queries).
+5. A **notebook pipeline** transforms Bronze → Silver (typed Delta) → Gold (aggregated star schema).
+6. In parallel, **Link to Microsoft Fabric** mirrors Dataverse tables (standard system tables or CoE Starter Kit `admin_*` tables) as read-only Delta tables in their own Lakehouse — no ETL, continuous CDC replication.
+7. At the **Gold layer**, streaming telemetry from the warm path is joined with Dataverse inventory from the cold path — enabling questions like "which maker's apps have the most errors."
+8. **Power BI Direct Lake** serves warm analytics; **Eventhouse (KQL)** serves a hot 7-day window for sub-second incident queries.
 
 **Why this approach**: full control over schema and enrichment, deterministic transforms, CI/CD via Bicep + GitHub Actions, and all infrastructure in your own Azure subscription (critical for regulated / sovereign environments).
 

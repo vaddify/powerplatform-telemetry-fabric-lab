@@ -2,13 +2,15 @@
 
 ```mermaid
 flowchart LR
-    PP["Power Platform\nTenant"] --> ES
+    PP["Power Platform\nTenant"] --> EH
     FN["Azure Function\n.NET 8"] -- polls BAP APIs --> PP
-    FN -- publishes --> ES["Fabric\nEventstream"]
-    DV["Dataverse\nCoE Kit / Standard"] -- Link to Fabric --> SV
+    FN -- publishes JSON --> EH["Event Hubs"]
+    EH --> ES["Fabric\nEventstream"]
+    DV["Dataverse"] -- Link to Fabric\nzero-ETL --> DVMirror["Dataverse\nLakehouse"]
     ES --> BZ["Bronze"]
     ES --> KQL["Eventhouse\nKQL"]
     BZ --> SV["Silver"]
+    DVMirror -- join at Gold --> GD
     SV --> GD["Gold"]
     GD --> PBI["Power BI\nDirect Lake"]
     KQL -.-> PBI
@@ -16,10 +18,12 @@ flowchart LR
     style PP fill:#742774,color:#fff
     style DV fill:#742774,color:#fff
     style FN fill:#0078D4,color:#fff
+    style EH fill:#0078D4,color:#fff
     style ES fill:#E8740C,color:#fff
     style BZ fill:#E8740C,color:#fff
     style SV fill:#E8740C,color:#fff
     style GD fill:#E8740C,color:#fff
+    style DVMirror fill:#E8740C,color:#fff
     style KQL fill:#E8740C,color:#fff
     style PBI fill:#F2C811,color:#000
 ```
@@ -106,11 +110,13 @@ Path 3 · COLD (Dataverse mirror)
 ## Objectives
 
 1. **Consolidate all signals.** Three data paths: Diagnostic settings stream
-   Dataverse, Power Apps, Power Automate, and Copilot Studio activity to a
-   Fabric Eventstream. An Azure Function polls BAP REST APIs for tenant-level
-   metrics not available in diagnostics (license usage, environment lifecycle).
-   Link to Microsoft Fabric mirrors CoE Starter Kit tables from Dataverse —
-   apps, flows, makers, connectors, DLP policies — as zero-ETL Delta tables.
+   Dataverse, Power Apps, Power Automate, and Copilot Studio activity through
+   Event Hubs to a Fabric Eventstream. An Azure Function polls BAP REST APIs
+   for tenant-level metrics not available in diagnostics (license usage,
+   environment lifecycle) and publishes to the same Event Hubs namespace.
+   Link to Microsoft Fabric mirrors Dataverse tables — standard system tables
+   for PoC, or CoE Starter Kit `admin_*` tables in production — as zero-ETL
+   Delta tables in their own Lakehouse.
 2. **Land in Fabric.** Eventstream → Bronze Lakehouse (raw JSON) → Silver (typed
    Delta) → Gold (star schema) → Power BI Direct Lake. A parallel Eventhouse
    provides a 7-day hot window for sub-second KQL queries.
@@ -143,19 +149,21 @@ flowchart TB
     subgraph PP["Power Platform Tenant"]
         DS["Diagnostic Settings\nper environment"]
         BAP["BAP REST APIs\ntenant-level analytics"]
-        DV["Dataverse\nCoE Starter Kit / Standard Tables"]
+        DV["Dataverse\nstandard tables / CoE Kit"]
     end
 
     subgraph AZ["Azure Subscription"]
         FN["Azure Function\n.NET 8 isolated · Flex Consumption"]
+        EH["Event Hubs\nNamespace"]
         KV["Key Vault\nRBAC mode"]
+        SA["Storage Account"]
         UAMI["UAMI"]
         AI["App Insights"]
     end
 
     subgraph FB["Microsoft Fabric"]
         ES["Eventstream\nCustom Endpoint source"]
-        DVMirror["Dataverse Mirror\nDelta tables"]
+        DVMirror["Dataverse Mirror\nLakehouse · Delta tables"]
         subgraph Lake["OneLake — Medallion"]
             BZ[("Bronze\nraw JSON")]
             SV[("Silver\ntyped Delta")]
@@ -171,18 +179,19 @@ flowchart TB
         FW["function.yml"]
     end
 
-    DS -- activity logs --> ES
+    DS -- activity logs --> EH
     FN -- polls --> BAP
-    FN -- publishes events\nvia EH-compatible SAS --> ES
-    DV -- Link to Fabric\nzero-ETL --> DVMirror
+    FN -- publishes JSON --> EH
+    EH -- EH-compatible SAS --> ES
+    DV -- Link to Fabric\nzero-ETL CDC --> DVMirror
     KV -. secrets .-> FN
     UAMI -. identity .-> FN
     FN -. traces .-> AI
     ES --> BZ
     ES --> EV
-    DVMirror -- notebook 00 --> SV
     NB -- Bronze → Silver --> SV
-    NB -- Silver → Gold --> GD
+    NB -- Silver + DV Mirror → Gold --> GD
+    DVMirror -. inventory join .-> GD
     GD --> PBI
     EV -.-> PBI
     IW -. OIDC deploy .-> AZ

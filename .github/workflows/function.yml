@@ -1,0 +1,57 @@
+name: function
+
+on:
+  push:
+    branches: [main]
+    paths: ['src/functions/**', '.github/workflows/function.yml']
+  pull_request:
+    branches: [main]
+    paths: ['src/functions/**', '.github/workflows/function.yml']
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  PROJECT: src/functions/PpTelemetryForwarder
+  DOTNET_VERSION: '8.0.x'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Restore
+        run: dotnet restore ${{ env.PROJECT }}
+      - name: Build
+        run: dotnet build ${{ env.PROJECT }} --configuration Release --no-restore
+      - name: Publish
+        run: dotnet publish ${{ env.PROJECT }} --configuration Release --output ./publish --no-build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: function-package
+          path: ./publish
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: lab
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: function-package
+          path: ./publish
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy to Function App
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ vars.FUNCTION_APP_NAME }}
+          package: ./publish

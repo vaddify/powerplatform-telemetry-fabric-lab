@@ -1,0 +1,58 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Secrets / local settings
+*.env
+*.env.*
+local.settings.json
+**/secrets.json
+*.pem
+*.pfx
+
+# Azure Functions
+bin/
+obj/
+.azurefunctions/
+
+# .NET
+*.user
+*.suo
+**/publish/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Node
+node_modules/
+dist/
+build/
+
+# Bicep build output
+*.bicepparam.json
+main.json
+
+# Terraform (if added)
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Logs
+*.log
+
+# Debug / inspection artifacts (contain tenant-specific data)
+inspect.json
+eventstream-full.json
+
+# Build / deployment artifacts
+*.zip
+logs/

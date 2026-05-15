@@ -1,0 +1,59 @@
+// =============================================================================
+// Power Platform Telemetry — Power BI seed measures (Direct Lake)
+// Paste into the semantic model on pp_gold.
+// =============================================================================
+
+App Sessions = COUNTROWS(fact_app_session)
+
+App Sessions 30D =
+CALCULATE(
+    [App Sessions],
+    DATESINPERIOD(dim_date[date_key], MAX(dim_date[date_key]), -30, DAY)
+)
+
+App Sessions YoY % =
+VAR cur = [App Sessions 30D]
+VAR prev = CALCULATE([App Sessions 30D], SAMEPERIODLASTYEAR(dim_date[date_key]))
+RETURN DIVIDE(cur - prev, prev)
+
+Avg Session Duration (s) =
+DIVIDE(SUM(fact_app_session[duration_ms]), [App Sessions]) / 1000
+
+Error Rate % =
+DIVIDE(
+    SUMX(fact_app_session, fact_app_session[error_count]),
+    [App Sessions]
+)
+
+Active Apps 30D =
+CALCULATE(
+    DISTINCTCOUNT(fact_app_session[app_id]),
+    DATESINPERIOD(dim_date[date_key], MAX(dim_date[date_key]), -30, DAY)
+)
+
+Active Makers 30D =
+CALCULATE(
+    DISTINCTCOUNT(dim_app[maker_id]),
+    DATESINPERIOD(dim_date[date_key], MAX(dim_date[date_key]), -30, DAY)
+)
+
+Flow Runs = COUNTROWS(fact_flow_run)
+
+Flow Failure Rate % =
+DIVIDE(
+    CALCULATE([Flow Runs], fact_flow_run[status] = "Failed"),
+    [Flow Runs]
+)
+
+Avg Flow Duration (s) = AVERAGE(fact_flow_run[duration_seconds])
+
+Copilot Messages = COUNTROWS(fact_copilot_message)
+
+Copilot Tokens In = SUM(fact_copilot_message[tokens_in])
+Copilot Tokens Out = SUM(fact_copilot_message[tokens_out])
+
+Copilot Escalation Rate % =
+DIVIDE(
+    CALCULATE([Copilot Messages], fact_copilot_message[escalated] = TRUE()),
+    [Copilot Messages]
+)

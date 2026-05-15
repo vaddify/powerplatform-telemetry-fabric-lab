@@ -1,0 +1,117 @@
+// ============================================================
+// Power Platform Telemetry — KQL Query Samples
+// Target: Eventhouse database "pp_hot"
+// ============================================================
+
+// ----------------------------------------------------------
+// 1. ENVIRONMENT INVENTORY — current snapshot from BAP API
+// ----------------------------------------------------------
+environment_inventory
+| project displayName, environmentSku, location, provisioningState, version
+| order by displayName asc
+
+// ----------------------------------------------------------
+// 2. RECENT RAW EVENTS — what landed in the last hour
+// ----------------------------------------------------------
+pp_telemetry_raw
+| where ingestion_time() > ago(1h)
+| summarize count() by eventType
+| order by count_ desc
+
+// ----------------------------------------------------------
+// 3. ENVIRONMENT LIFECYCLE EVENTS — new/deleted/modified envs
+// ----------------------------------------------------------
+pp_telemetry_raw
+| where eventType == "pp.environment.lifecycle"
+| extend data = parse_json(payload_json)
+| mv-expand env = data.value
+| project timestamp,
+    envName    = tostring(env.properties.displayName),
+    envSku     = tostring(env.properties.environmentSku),
+    state      = tostring(env.properties.states.runtime.runtimeReasonCode),
+    region     = tostring(env.location),
+    created    = todatetime(env.properties.createdTime),
+    modified   = todatetime(env.properties.lastModifiedTime)
+| order by timestamp desc
+
+// ----------------------------------------------------------
+// 4. LICENSE USAGE TREND — capacity consumption over time
+// ----------------------------------------------------------
+pp_telemetry_raw
+| where eventType == "pp.tenant.licenseUsage"
+| extend data = parse_json(payload_json)
+| mv-expand cap = data.value
+| project timestamp,
+    skuName       = tostring(cap.capacityType),
+    totalUnits    = tolong(cap.totalCapacity),
+    consumedUnits = tolong(cap.currentUsage),
+    utilization   = round(100.0 * tolong(cap.currentUsage) / tolong(cap.totalCapacity), 1)
+| order by timestamp desc
+
+// ----------------------------------------------------------
+// 5. ERROR RATE BY EVENT TYPE — reliability overview
+// ----------------------------------------------------------
+pp_telemetry_raw
+| where timestamp > ago(7d)
+| extend data = parse_json(payload_json)
+| extend hasError = isnotempty(data.error) or tolong(data.errorCount) > 0
+| summarize total = count(),
+            errors = countif(hasError)
+            by eventType, bin(timestamp, 1d)
+| extend error_rate_pct = round(100.0 * errors / total, 1)
+| order by error_rate_pct desc
+
+// ----------------------------------------------------------
+// 6. TOP ENVIRONMENTS BY EVENT VOLUME
+// ----------------------------------------------------------
+environments
+| join kind=leftouter (
+    pp_telemetry_raw
+    | where timestamp > ago(24h)
+    | summarize event_count = count() by eventType
+) on $left.eventType == $right.eventType
+| project displayName, environmentSku, event_count
+| order by event_count desc
+
+// ----------------------------------------------------------
+// 7. DATA FRESHNESS CHECK — are all event types arriving?
+// ----------------------------------------------------------
+pp_telemetry_raw
+| summarize last_event = max(timestamp),
+            event_count = count()
+            by eventType
+| extend age_minutes = datetime_diff('minute', now(), last_event)
+| extend status = iff(age_minutes > 120, "STALE", "OK")
+| order by age_minutes desc
+
+// ----------------------------------------------------------
+// 8. ENVIRONMENT DRIFT — envs modified in last 7 days
+// ----------------------------------------------------------
+pp_telemetry_raw
+| where eventType == "pp.environment.lifecycle"
+| extend data = parse_json(payload_json)
+| mv-expand env = data.value
+| where todatetime(env.properties.lastModifiedTime) > ago(7d)
+| project envName  = tostring(env.properties.displayName),
+    envSku   = tostring(env.properties.environmentSku),
+    modified = todatetime(env.properties.lastModifiedTime),
+    state    = tostring(env.properties.states.runtime.runtimeReasonCode)
+| order by modified desc
+
+// ----------------------------------------------------------
+// 9. HOURLY INGESTION VOLUME — capacity planning
+// ----------------------------------------------------------
+pp_telemetry_raw
+| where timestamp > ago(7d)
+| summarize events = count(),
+            bytes  = sum(estimate_data_size(*))
+            by bin(timestamp, 1h)
+| extend mb = round(bytes / 1024.0 / 1024.0, 2)
+| order by timestamp desc
+
+// ----------------------------------------------------------
+// 10. SAMPLE RAW PAYLOAD — debug / schema discovery
+// ----------------------------------------------------------
+pp_telemetry_raw
+| take 5
+| project eventType, timestamp, payload_json

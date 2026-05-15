@@ -145,3 +145,49 @@ The base pipeline, schema, and Tier 1+2 measures stay identical. Verticals **add
 - Which vertical lens applies, and which Tier-3 KPIs do you need to add?
 - What is the alert routing? Teams channel? ServiceNow queue? PagerDuty?
 - What is the retention policy for the gold layer? (Default: 7 years cold, 90 days hot.)
+
+## 12. CoE Starter Kit — required or optional?
+
+**Optional.** The pipeline architecture is designed to work with or without the
+CoE Starter Kit installed.
+
+### Without CoE Kit (PoC path)
+
+Link to Microsoft Fabric mirrors **standard Dataverse tables** that exist in
+every environment out of the box:
+
+| Table | What it gives you |
+|---|---|
+| `solution` | Full solution inventory (516 rows in the reference environment) |
+| `systemuserroles` | User-to-role mappings |
+| `systemuserprofiles` / `systemusermanagermap` | Org hierarchy for BU attribution |
+| `workflowmetadata` / `workflowbinary` | Flow definitions and metadata |
+| `appaction` / `appactionrule` / `appmoduleroles` | App structure and RBAC |
+| `workqueue` / `workqueueitem` | Work queue utilization |
+| + 5 metadata tables | `OptionsetMetadata`, `StateMetadata`, `StatusMetadata`, `GlobalOptionsetMetadata`, `TargetMetadata` |
+
+This is enough to **prove the architecture end-to-end**: streaming telemetry in
+the hot/warm paths joined with inventory data from the cold path.
+
+### With CoE Kit (production path)
+
+Installing the CoE Starter Kit adds enriched `admin_*` tables:
+
+| Table | Enrichment over standard tables |
+|---|---|
+| `admin_apps` | All canvas + model-driven apps across environments, with last-launched date |
+| `admin_flows` | All cloud flows with owner, connector list, run history |
+| `admin_makers` | Maker profiles with department, last-active date |
+| `admin_environments` | Environment metadata with capacity, DLP, security roles |
+| `admin_connectors` | Connector inventory with risk classification |
+
+The CoE Kit is an **additive upgrade** — it enriches the Dataverse mirror with
+purpose-built inventory. The pipeline, notebooks, and Gold layer all handle both
+scenarios: `02_silver_to_gold.py` includes fallback logic that gracefully skips
+CoE-specific tables when they're unavailable.
+
+### Recommendation
+
+Start with the PoC path to validate the architecture and demonstrate value to
+stakeholders. Install the CoE Kit when you're ready to move to production — the
+pipeline absorbs the new tables automatically without restructuring.

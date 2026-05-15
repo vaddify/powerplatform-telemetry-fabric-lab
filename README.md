@@ -5,7 +5,7 @@ flowchart LR
     PP["Power Platform\nTenant"] --> ES
     FN["Azure Function\n.NET 8"] -- polls BAP APIs --> PP
     FN -- publishes --> ES["Fabric\nEventstream"]
-    DV["Dataverse\nCoE Kit"] -- Link to Fabric --> SV
+    DV["Dataverse\nCoE Kit / Standard"] -- Link to Fabric --> SV
     ES --> BZ["Bronze"]
     ES --> KQL["Eventhouse\nKQL"]
     BZ --> SV["Silver"]
@@ -24,14 +24,17 @@ flowchart LR
     style PBI fill:#F2C811,color:#000
 ```
 
-A production-grade reference implementation that consolidates all Power Platform
+A production-grade reference implementation that gives any **Power Platform Center
+of Excellence (CoE)** a unified observability platform — consolidating all
 telemetry into a **Microsoft Fabric medallion lakehouse** with a Direct Lake
 Power BI model, sub-second KQL queries, and 8 base KPIs. Three data paths feed
-the pipeline: **Diagnostic settings** stream per-environment activity to a Fabric
-Eventstream, an **Azure Function** (.NET 8 isolated) polls BAP REST APIs for
-tenant-level metrics, and **Link to Microsoft Fabric** mirrors CoE Starter Kit
-tables from Dataverse as zero-ETL Delta tables in OneLake. Infrastructure is
-deployed via Bicep and GitHub Actions with OIDC workload identity federation.
+the pipeline: a **hot path** where an Azure Function (.NET 8 isolated) polls BAP
+REST APIs and streams through Eventstream to a KQL Eventhouse for real-time alerts;
+a **warm path** where the same events land in a Bronze → Silver → Gold lakehouse
+for trend analytics; and a **cold path** where **Link to Microsoft Fabric** mirrors
+Dataverse tables as zero-ETL Delta tables — enabling joins between *who built what*
+(inventory) and *how it's performing* (telemetry). Infrastructure is deployed via
+Bicep and GitHub Actions with OIDC workload identity federation.
 
 ## Purpose
 
@@ -39,6 +42,66 @@ Show how to build, deploy, and operate a real telemetry pipeline for Power Platf
 at enterprise scale — using Azure-native services for full control, custom
 enrichment, and CI/CD — so any **Center of Excellence** can answer governance,
 adoption, and operations questions across time, environments, and business units.
+
+## The problem
+
+Every enterprise running Power Platform at scale hits the same blind spot.
+
+You have 5,000 Power Apps, 12,000 flows, and 40 environments spread across
+business units. The platform is growing — but you can't answer basic questions:
+
+> *Which apps are actively used? Which flows are failing silently? Who built
+> them? Are any connecting to unsanctioned data sources? What's the cost per
+> department?*
+
+The telemetry exists, but it's **scattered** — Application Insights holds runtime
+traces (7-day retention), Dataverse stores the inventory (no history), the BAP
+admin APIs return point-in-time snapshots (no persistence), and the Power Platform
+Admin Center shows dashboards you can't join or export at scale.
+
+A **Center of Excellence (CoE)** is the organizational function — typically run by
+IT or a platform team — that governs, monitors, and nurtures Power Platform
+adoption. Microsoft ships a free [CoE Starter Kit](https://learn.microsoft.com/power-platform/guidance/coe/starter-kit)
+that inventories every app, flow, maker, and connector into Dataverse `admin_*`
+tables. But even with the kit installed, the CoE still can't do time-series
+analytics, real-time alerting, or cross-source joins without manually stitching
+exports every reporting cycle.
+
+**This pipeline solves that.** It consolidates all three signal sources into
+Microsoft Fabric — giving the CoE one analytical store that powers governance,
+operations, and growth.
+
+## Why three data paths
+
+No single source has the full picture. Each path answers different questions,
+and the real value comes from **joining them together**.
+
+```
+Path 1 · HOT (real-time)
+  Azure Function → BAP APIs → Event Hubs → Eventstream → KQL Eventhouse
+  → "A production flow just broke — alert the team NOW"
+
+Path 2 · WARM (batch analytics)
+  Eventstream → Bronze Lakehouse → Silver → Gold → Power BI
+  → "How has Power Apps adoption grown over 6 months?"
+
+Path 3 · COLD (Dataverse mirror)
+  Dataverse → Link to Microsoft Fabric → Delta Lakehouse
+  → "Which maker's apps have the most errors?" (join with Path 2)
+```
+
+| Question a CoE asks | Which path answers it |
+|---|---|
+| "A flow just failed 50 times in 10 minutes" | **Hot** — KQL real-time query |
+| "Adoption trend by BU over 6 months" | **Warm** — Gold star schema |
+| "Which maker's apps cause the most errors?" | **Cold + Warm joined** |
+| "Any flows using deprecated connectors?" | **Cold** — Dataverse mirror |
+| "Cost-per-department for Power Platform" | **All three combined** |
+
+> **PoC note:** This lab uses standard Dataverse tables (`solution`,
+> `systemuserroles`, `workflowmetadata`, etc.) to prove the architecture
+> end-to-end without requiring the CoE Starter Kit. Installing the kit later
+> adds enriched `admin_*` tables — it's an additive upgrade, not a prerequisite.
 
 ## Objectives
 
@@ -66,7 +129,7 @@ adoption, and operations questions across time, environments, and business units
 |---|---|---|
 | 1 | **Diagnostic Settings** | Streams per-environment activity (Dataverse, Apps, Flows, Copilot Studio) to the Eventstream |
 | 2 | **Azure Function** (.NET 8 isolated, Flex Consumption) | Polls BAP REST APIs — `PollLicenseUsage` every 15 min, `PollEnvironmentLifecycle` hourly — publishes to Eventstream Custom Endpoint |
-| 3 | **Link to Microsoft Fabric** (Dataverse) | Zero-ETL mirror of CoE Starter Kit tables — apps, flows, makers, connectors, DLP policies, app launches — as read-only Delta tables in OneLake |
+| 3 | **Link to Microsoft Fabric** (Dataverse) | Zero-ETL mirror of Dataverse tables — works with standard tables (PoC) or CoE Starter Kit `admin_*` tables (production) — as read-only Delta tables in OneLake |
 | 4 | **Key Vault** (RBAC mode) | Stores Eventstream SAS connection string and app registration secret; Function reads via `@Microsoft.KeyVault(...)` references |
 | 5 | **Fabric Eventstream** (Custom Endpoint source) | Receives events from both diagnostic settings and the Azure Function, fans out to Bronze Lakehouse (Delta) + Eventhouse (KQL) |
 | 6 | **Medallion notebooks** (00 → 01 → 02 → 03) | PySpark: Dataverse mirror → Silver staging; Bronze parse → Silver typed; Silver → Gold star schema; quality checks |
@@ -80,7 +143,7 @@ flowchart TB
     subgraph PP["Power Platform Tenant"]
         DS["Diagnostic Settings\nper environment"]
         BAP["BAP REST APIs\ntenant-level analytics"]
-        DV["Dataverse\nCoE Starter Kit"]
+        DV["Dataverse\nCoE Starter Kit / Standard Tables"]
     end
 
     subgraph AZ["Azure Subscription"]

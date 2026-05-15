@@ -312,6 +312,83 @@ Inside the workspace, create three Lakehouses for the medallion architecture:
 
 ---
 
+## Step 5.5 — Enable Link to Microsoft Fabric (Dataverse mirror)
+
+"Link to Microsoft Fabric" mirrors Dataverse tables into your Fabric workspace as **read-only Delta tables** in OneLake — zero ETL, near-real-time sync. This brings CoE Starter Kit inventory data (apps, flows, makers, connectors, environments) into the medallion pipeline.
+
+### Prerequisites
+
+- CoE Starter Kit installed in at least one Power Platform environment ([setup guide](https://learn.microsoft.com/en-us/power-platform/guidance/coe/setup)).
+- The environment must have a Dataverse database provisioned.
+- Fabric capacity assigned to the target workspace.
+
+### 5.5.1 — Enable the link from Power Platform admin center
+
+1. Open [Power Platform admin center](https://admin.powerplatform.microsoft.com/) → **Environments** → select the environment with CoE Kit.
+2. Click **Settings** → **Product** → **Features**.
+3. Under **Link to Microsoft Fabric**, toggle **On**.
+4. Click **Save**.
+
+### 5.5.2 — Create the link in Fabric
+
+1. Open the `pp-telemetry-lab` workspace in Fabric.
+2. Click **+ New item** → **Shortcuts** → **Microsoft Dataverse**.
+3. Sign in when prompted and select the environment.
+4. Select the tables to mirror:
+
+| Dataverse Table (CoE Kit) | Display Name | Purpose |
+|---|---|---|
+| `admin_app` | Power Apps Inventory | App id, name, owner, created, modified, connector list |
+| `admin_flow` | Flow Inventory | Flow id, name, owner, status, trigger type |
+| `admin_maker` | Maker Inventory | User id, display name, email, department, city |
+| `admin_environment` | Environment Inventory | Environment id, name, type, region, SKU |
+| `admin_connector` | Connector Inventory | Connector id, name, tier (standard/premium), publisher |
+| `admin_dlpolicies` | DLP Policy Inventory | Policy id, name, environments, connector groups |
+| `admin_appuserlaunch` | App User Launch | App id, user id, launch date — for MAU calculation |
+
+5. Click **Create**. Fabric begins the initial sync — typically 5–30 minutes depending on data volume.
+
+> **Note**: If you don't have the CoE Starter Kit, you can still mirror native Dataverse tables like `systemuser`, `workflow`, `canvasapp`, `solutioncomponent`. The notebooks handle both CoE and native schemas.
+
+### 5.5.3 — Verify the mirrored tables
+
+In the `pp-telemetry-lab` workspace you should see a new **Mirrored Database** item. Open it and confirm:
+
+```
+Mirrored Dataverse DB
+├── Tables/
+│   ├── admin_app
+│   ├── admin_flow
+│   ├── admin_maker
+│   ├── admin_environment
+│   ├── admin_connector
+│   ├── admin_dlpolicies
+│   └── admin_appuserlaunch
+```
+
+Query a quick count in a notebook:
+
+```python
+df = spark.read.format("delta").table("pp_dataverse_mirror.admin_app")
+print(f"Apps mirrored: {df.count()}")
+```
+
+### 5.5.4 — How this fits the medallion pipeline
+
+The mirrored tables are **already in Delta format in OneLake** — they act as a parallel Bronze source alongside the Eventstream-fed `pp_bronze.events_raw`. The medallion notebooks (updated in Step 8) read from both:
+
+```
+Eventstream → pp_bronze.events_raw  ──┐
+                                      ├── Silver (typed, deduped)
+Dataverse mirror → admin_*  ──────────┘           │
+                                                   ▼
+                                              Gold (star schema)
+                                                   │
+                                              Direct Lake → PBI
+```
+
+---
+
 ## Step 6 — Configure Power Platform diagnostic settings
 
 For each Power Platform environment whose telemetry you want to capture:
@@ -413,14 +490,15 @@ Run in order:
 
 | # | Notebook | Input | Output | Schedule |
 |---|---|---|---|---|
+| 0 | `00_dataverse_mirror.py` | Dataverse mirror tables (`admin_app`, `admin_flow`, etc.) | `pp_silver` (`dv_apps`, `dv_flows`, `dv_makers`, `dv_environments`, `dv_connectors`, `dv_dlp_policies`, `dv_app_launches`) | Every 30 min |
 | 1 | `01_bronze_to_silver.py` | `pp_bronze.events_raw` | `pp_silver` (typed Delta, one table per event type) | Every 30 min |
-| 2 | `02_silver_to_gold.py` | `pp_silver.*` | `pp_gold` (`dim_environment`, `dim_app`, `dim_maker`, `fact_app_session`, `fact_flow_run`, `fact_license`) | Hourly |
+| 2 | `02_silver_to_gold.py` | `pp_silver.*` | `pp_gold` (`dim_environment`, `dim_app`, `dim_maker`, `dim_connector`, `dim_dlp_policy`, `fact_app_session`, `fact_flow_run`, `fact_copilot_message`, `fact_app_launch`) | Hourly |
 | 3 | `03_gold_quality_checks.py` | `pp_gold.*` | Row count, null %, freshness assertions | Hourly, alert on fail |
 
 ### 8.3 — Schedule with Data Factory pipeline (optional)
 
 1. In the workspace, click **+ New item** → **Data pipeline**.
-2. Add three **Notebook** activities in sequence (01 → 02 → 03).
+2. Add four **Notebook** activities in sequence (00 → 01 → 02 → 03).
 3. Set a schedule trigger (e.g., every 30 minutes).
 4. Configure alerts on failure.
 

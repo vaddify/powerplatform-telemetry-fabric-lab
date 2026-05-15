@@ -5,6 +5,7 @@ flowchart LR
     PP["Power Platform\nTenant"] --> ES
     FN["Azure Function\n.NET 8"] -- polls BAP APIs --> PP
     FN -- publishes --> ES["Fabric\nEventstream"]
+    DV["Dataverse\nCoE Kit"] -- Link to Fabric --> SV
     ES --> BZ["Bronze"]
     ES --> KQL["Eventhouse\nKQL"]
     BZ --> SV["Silver"]
@@ -13,6 +14,7 @@ flowchart LR
     KQL -.-> PBI
 
     style PP fill:#742774,color:#fff
+    style DV fill:#742774,color:#fff
     style FN fill:#0078D4,color:#fff
     style ES fill:#E8740C,color:#fff
     style BZ fill:#E8740C,color:#fff
@@ -24,11 +26,12 @@ flowchart LR
 
 A production-grade reference implementation that consolidates all Power Platform
 telemetry into a **Microsoft Fabric medallion lakehouse** with a Direct Lake
-Power BI model, sub-second KQL queries, and 8 base KPIs. An Azure Function
-(.NET 8 isolated) polls BAP REST APIs and publishes directly to a Fabric
-Eventstream Custom Endpoint. Diagnostic settings stream per-environment activity
-to the same Eventstream. Infrastructure is deployed via Bicep and GitHub Actions
-with OIDC workload identity federation.
+Power BI model, sub-second KQL queries, and 8 base KPIs. Three data paths feed
+the pipeline: **Diagnostic settings** stream per-environment activity to a Fabric
+Eventstream, an **Azure Function** (.NET 8 isolated) polls BAP REST APIs for
+tenant-level metrics, and **Link to Microsoft Fabric** mirrors CoE Starter Kit
+tables from Dataverse as zero-ETL Delta tables in OneLake. Infrastructure is
+deployed via Bicep and GitHub Actions with OIDC workload identity federation.
 
 ## Purpose
 
@@ -39,11 +42,12 @@ adoption, and operations questions across time, environments, and business units
 
 ## Objectives
 
-1. **Consolidate all signals.** Diagnostic settings stream Dataverse, Power Apps,
-   Power Automate, and Copilot Studio activity to a Fabric Eventstream. An Azure
-   Function polls BAP REST APIs for tenant-level metrics not available in
-   diagnostics (license usage, environment lifecycle) and publishes to the same
-   Eventstream via its Event Hub-compatible Custom Endpoint.
+1. **Consolidate all signals.** Three data paths: Diagnostic settings stream
+   Dataverse, Power Apps, Power Automate, and Copilot Studio activity to a
+   Fabric Eventstream. An Azure Function polls BAP REST APIs for tenant-level
+   metrics not available in diagnostics (license usage, environment lifecycle).
+   Link to Microsoft Fabric mirrors CoE Starter Kit tables from Dataverse —
+   apps, flows, makers, connectors, DLP policies — as zero-ETL Delta tables.
 2. **Land in Fabric.** Eventstream → Bronze Lakehouse (raw JSON) → Silver (typed
    Delta) → Gold (star schema) → Power BI Direct Lake. A parallel Eventhouse
    provides a 7-day hot window for sub-second KQL queries.
@@ -62,11 +66,12 @@ adoption, and operations questions across time, environments, and business units
 |---|---|---|
 | 1 | **Diagnostic Settings** | Streams per-environment activity (Dataverse, Apps, Flows, Copilot Studio) to the Eventstream |
 | 2 | **Azure Function** (.NET 8 isolated, Flex Consumption) | Polls BAP REST APIs — `PollLicenseUsage` every 15 min, `PollEnvironmentLifecycle` hourly — publishes to Eventstream Custom Endpoint |
-| 3 | **Key Vault** (RBAC mode) | Stores Eventstream SAS connection string and app registration secret; Function reads via `@Microsoft.KeyVault(...)` references |
-| 4 | **Fabric Eventstream** (Custom Endpoint source) | Receives events from both diagnostic settings and the Azure Function, fans out to Bronze Lakehouse (Delta) + Eventhouse (KQL) |
-| 5 | **Bronze → Silver → Gold notebooks** | PySpark medallion: parse → type-cast → dedupe → star schema (dim/fact tables) |
-| 6 | **Eventhouse** (KQL) | 7-day hot window for sub-second incident queries and live dashboards |
-| 7 | **Power BI Direct Lake** | Semantic model over Gold tables — reads Delta directly from OneLake, 30+ DAX measures |
+| 3 | **Link to Microsoft Fabric** (Dataverse) | Zero-ETL mirror of CoE Starter Kit tables — apps, flows, makers, connectors, DLP policies, app launches — as read-only Delta tables in OneLake |
+| 4 | **Key Vault** (RBAC mode) | Stores Eventstream SAS connection string and app registration secret; Function reads via `@Microsoft.KeyVault(...)` references |
+| 5 | **Fabric Eventstream** (Custom Endpoint source) | Receives events from both diagnostic settings and the Azure Function, fans out to Bronze Lakehouse (Delta) + Eventhouse (KQL) |
+| 6 | **Medallion notebooks** (00 → 01 → 02 → 03) | PySpark: Dataverse mirror → Silver staging; Bronze parse → Silver typed; Silver → Gold star schema; quality checks |
+| 7 | **Eventhouse** (KQL) | 7-day hot window for sub-second incident queries and live dashboards |
+| 8 | **Power BI Direct Lake** | Semantic model over Gold tables — reads Delta directly from OneLake, 30+ DAX measures |
 
 ## Data flow
 
@@ -75,6 +80,7 @@ flowchart TB
     subgraph PP["Power Platform Tenant"]
         DS["Diagnostic Settings\nper environment"]
         BAP["BAP REST APIs\ntenant-level analytics"]
+        DV["Dataverse\nCoE Starter Kit"]
     end
 
     subgraph AZ["Azure Subscription"]
@@ -86,6 +92,7 @@ flowchart TB
 
     subgraph FB["Microsoft Fabric"]
         ES["Eventstream\nCustom Endpoint source"]
+        DVMirror["Dataverse Mirror\nDelta tables"]
         subgraph Lake["OneLake — Medallion"]
             BZ[("Bronze\nraw JSON")]
             SV[("Silver\ntyped Delta")]
@@ -104,11 +111,13 @@ flowchart TB
     DS -- activity logs --> ES
     FN -- polls --> BAP
     FN -- publishes events\nvia EH-compatible SAS --> ES
+    DV -- Link to Fabric\nzero-ETL --> DVMirror
     KV -. secrets .-> FN
     UAMI -. identity .-> FN
     FN -. traces .-> AI
     ES --> BZ
     ES --> EV
+    DVMirror -- notebook 00 --> SV
     NB -- Bronze → Silver --> SV
     NB -- Silver → Gold --> GD
     GD --> PBI
@@ -257,8 +266,9 @@ powerplatform-telemetry-fabric-lab/
   lab/
     README.md                        Full lab walkthrough (10 steps, ~4 h)
   notebooks/
+    00_dataverse_mirror.py           Dataverse CoE Kit tables → Silver staging
     01_bronze_to_silver.py           Parse JSON, type-cast, dedupe → Silver
-    02_silver_to_gold.py             Star schema dim/fact → Gold
+    02_silver_to_gold.py             Star schema dim/fact → Gold (prefers DV mirror)
     03_gold_quality_checks.py        Data quality harness
     measures.dax                     30+ DAX measures for Direct Lake
     README.md                        Scheduling guide

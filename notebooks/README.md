@@ -10,8 +10,9 @@ Alternatively in VS Code: install the **Jupyter** extension and these files open
 
 | File | Source → Sink | Schedule |
 |---|---|---|
+| [00_dataverse_mirror.py](./00_dataverse_mirror.py) | Dataverse mirror (`admin_app`, `admin_flow`, etc.) → `pp_silver.{dv_apps, dv_flows, dv_makers, dv_environments, dv_connectors, dv_dlp_policies, dv_app_launches}` | 30 min |
 | [01_bronze_to_silver.py](./01_bronze_to_silver.py) | `pp_bronze.events_raw` → `pp_silver.{app_telemetry, flow_runs, copilot_messages, dataverse_events, tenant_metrics}` | 30 min |
-| [02_silver_to_gold.py](./02_silver_to_gold.py) | `pp_silver.*` → `pp_gold.{dim_*, fact_*}` | 1 h |
+| [02_silver_to_gold.py](./02_silver_to_gold.py) | `pp_silver.*` → `pp_gold.{dim_*, fact_*}` — prefers Dataverse mirror for dims when available | 1 h |
 | [03_gold_quality_checks.py](./03_gold_quality_checks.py) | `pp_gold.*` → `pp_gold.dq_results` (alerts on fail) | 1 h |
 
 [measures.dax](./measures.dax) — seed Power BI measures for the Direct Lake semantic model on `pp_gold`.

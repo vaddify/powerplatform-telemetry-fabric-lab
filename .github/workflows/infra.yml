@@ -48,7 +48,6 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: validate
     runs-on: ubuntu-latest
-    environment: lab
     steps:
       - uses: actions/checkout@v4
       - uses: azure/login@v2
